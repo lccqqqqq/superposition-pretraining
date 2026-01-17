@@ -25,24 +25,26 @@ class TextDataset(Dataset):
 
     def __len__(self):
         # Number of non-overlapping chunks
-        # We need max_seq_length + 1 tokens per chunk (for input + target)
-        return len(self.tokens) // (self.max_seq_length + 1)
+        # Each chunk is max_seq_length tokens (model handles next-token prediction internally)
+        return len(self.tokens) // self.max_seq_length
 
     def __getitem__(self, idx):
         # Get non-overlapping chunk
-        start_idx = idx * (self.max_seq_length + 1)
-        end_idx = start_idx + self.max_seq_length + 1
+        start_idx = idx * self.max_seq_length
+        end_idx = start_idx + self.max_seq_length
 
         chunk = self.tokens[start_idx:end_idx]
 
         # If chunk is too short, pad it (only for last chunk)
-        if len(chunk) < self.max_seq_length + 1:
-            padding = torch.zeros(self.max_seq_length + 1 - len(chunk), dtype=torch.long)
+        if len(chunk) < self.max_seq_length:
+            # Pad with -100 to ignore in loss computation
+            padding = torch.full((self.max_seq_length - len(chunk),), -100, dtype=torch.long)
             chunk = torch.cat([chunk, padding])
 
-        # Input is all tokens except last, target is all tokens except first
-        input_ids = chunk[:-1]
-        labels = chunk[1:]
+        # GPT2LMHeadModel shifts labels internally, so we pass the same sequence
+        # The model will predict token[i+1] from token[0:i]
+        input_ids = chunk
+        labels = chunk
 
         return {
             "input_ids": input_ids,
