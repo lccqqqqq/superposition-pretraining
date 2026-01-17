@@ -24,14 +24,18 @@ class TextDataset(Dataset):
         self.max_seq_length = max_seq_length
 
     def __len__(self):
-        # Number of possible sequences (with sliding window)
-        return max(1, len(self.tokens) - self.max_seq_length)
+        # Number of non-overlapping chunks
+        # We need max_seq_length + 1 tokens per chunk (for input + target)
+        return len(self.tokens) // (self.max_seq_length + 1)
 
     def __getitem__(self, idx):
-        # Get sequence of length max_seq_length + 1 (for input and target)
-        chunk = self.tokens[idx : idx + self.max_seq_length + 1]
+        # Get non-overlapping chunk
+        start_idx = idx * (self.max_seq_length + 1)
+        end_idx = start_idx + self.max_seq_length + 1
 
-        # If chunk is too short, pad it
+        chunk = self.tokens[start_idx:end_idx]
+
+        # If chunk is too short, pad it (only for last chunk)
         if len(chunk) < self.max_seq_length + 1:
             padding = torch.zeros(self.max_seq_length + 1 - len(chunk), dtype=torch.long)
             chunk = torch.cat([chunk, padding])
@@ -164,6 +168,7 @@ def get_dataloaders(
     batch_size: int = 8,
     num_workers: int = 4,
     max_samples: int = None,
+    device: str = "cuda",
 ):
     """
     Create train and validation dataloaders.
@@ -175,6 +180,7 @@ def get_dataloaders(
         batch_size: Batch size
         num_workers: Number of dataloader workers
         max_samples: Maximum samples to load (for debugging)
+        device: Device type (used to determine pin_memory setting)
 
     Returns:
         train_loader, val_loader
@@ -186,13 +192,16 @@ def get_dataloaders(
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
+    # Disable pin_memory on MPS (not supported)
+    use_pin_memory = device == "cuda"
+
     # Create dataloaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
     )
 
     val_loader = DataLoader(
@@ -200,7 +209,7 @@ def get_dataloaders(
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
     )
 
     return train_loader, val_loader

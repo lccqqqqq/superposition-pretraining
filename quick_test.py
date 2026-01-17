@@ -43,6 +43,7 @@ train_loader, val_loader = get_dataloaders(
     max_seq_length=config.max_seq_length,
     batch_size=config.batch_size,
     num_workers=config.num_workers,
+    device=config.device,
 )
 
 # Setup optimizer

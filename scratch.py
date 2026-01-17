@@ -30,6 +30,7 @@ train_loader, val_loader = get_dataloaders(
     max_seq_length=config.max_seq_length,
     batch_size=config.batch_size,
     num_workers=0,  # Set to 0 for debugging in notebooks
+    device=config.device,
 )
 
 #%% Test forward pass

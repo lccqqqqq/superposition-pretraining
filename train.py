@@ -1,3 +1,7 @@
+import os
+# Suppress tokenizers parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -144,6 +148,7 @@ def train(config: TrainingConfig):
         max_seq_length=config.max_seq_length,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
+        device=config.device,
     )
 
     print(f"Train batches: {len(train_loader)}")
