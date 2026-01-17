@@ -222,10 +222,13 @@ def train(config: TrainingConfig):
 
                 # Logging
                 if global_step % config.log_interval == 0:
-                    avg_loss = running_loss / config.log_interval
-                    avg_ce_loss = running_ce_loss / config.log_interval
-                    avg_penalty = running_penalty / config.log_interval
-                    avg_max_prob = running_max_prob / config.log_interval
+                    # We accumulate per batch, but log per global step
+                    # Need to divide by (log_interval * gradient_accumulation_steps)
+                    num_batches = config.log_interval * config.gradient_accumulation_steps
+                    avg_loss = running_loss / num_batches
+                    avg_ce_loss = running_ce_loss / num_batches
+                    avg_penalty = running_penalty / num_batches
+                    avg_max_prob = running_max_prob / num_batches
 
                     pbar.set_postfix({
                         "loss": f"{avg_loss:.4f}",
