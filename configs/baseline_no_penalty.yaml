@@ -1,0 +1,21 @@
+# Baseline: No sharpness penalty
+# Standard GPT2 training for comparison with penalty experiments
+
+dataset: tinyshakespeare
+batch_size: 8
+gradient_accumulation_steps: 4
+num_epochs: 10
+
+# No penalty (baseline)
+penalty_type: non_max_sum
+penalty_weight: 0.0  # Zero weight = no penalty
+
+# W&B settings
+use_wandb: true
+wandb_project: gpt2-entropy-regularization
+wandb_entity: null
+
+# Standard training settings
+learning_rate: 0.0006
+max_seq_length: 1024
+seed: 42

@@ -1,0 +1,22 @@
+# Quick test configuration for debugging and rapid iteration
+# Uses TinyShakespeare with small batch size and frequent logging
+
+dataset: tinyshakespeare
+batch_size: 2
+gradient_accumulation_steps: 1
+num_epochs: 1
+max_seq_length: 128
+
+# Penalty settings
+penalty_type: non_max_sum
+penalty_weight: 0.01
+
+# Frequent logging for testing
+log_interval: 5
+eval_interval: 20
+save_interval: 100
+generate_interval: 20
+
+# Disable W&B for quick tests
+use_wandb: false
+num_workers: 0

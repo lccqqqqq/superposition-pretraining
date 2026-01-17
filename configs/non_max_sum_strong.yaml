@@ -1,0 +1,21 @@
+# Experiment: Strong non-max-sum penalty
+# Tests higher penalty weight to encourage very sharp predictions
+
+dataset: tinyshakespeare
+batch_size: 8
+gradient_accumulation_steps: 4
+num_epochs: 10
+
+# Strong sharpness penalty
+penalty_type: non_max_sum
+penalty_weight: 0.1  # 10x higher than default
+
+# W&B settings
+use_wandb: true
+wandb_project: gpt2-entropy-regularization
+wandb_entity: null  # Set to your W&B username
+
+# Training settings
+learning_rate: 0.0006
+max_seq_length: 1024
+seed: 42

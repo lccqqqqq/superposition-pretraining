@@ -1,0 +1,69 @@
+# GPT2 Training Configuration with Entropy Regularization
+# This is the default configuration file. Copy and modify for experiments.
+
+# ============================================================================
+# Model Settings
+# ============================================================================
+model_name: gpt2  # HuggingFace model identifier (gpt2 = GPT2-small, 124M params)
+
+# ============================================================================
+# Dataset Settings
+# ============================================================================
+dataset: tinyshakespeare  # Options: "tinyshakespeare" or "openwebtext"
+max_seq_length: 1024  # Maximum sequence length for training
+
+# ============================================================================
+# Training Hyperparameters
+# ============================================================================
+batch_size: 8  # Per-device batch size
+gradient_accumulation_steps: 4  # Effective batch size = batch_size * gradient_accumulation_steps
+num_epochs: 10  # Number of training epochs
+learning_rate: 0.0006  # AdamW learning rate (6e-4)
+weight_decay: 0.1  # Weight decay for AdamW optimizer
+warmup_steps: 500  # Number of warmup steps for learning rate scheduler
+max_grad_norm: 1.0  # Maximum gradient norm for clipping
+
+# ============================================================================
+# Sharpness Penalty Settings
+# ============================================================================
+penalty_type: non_max_sum  # Options: "non_max_sum", "neg_entropy", "neg_max_prob", "top_k_mass"
+penalty_weight: 0.01  # Lambda (λ) weight for penalty term in loss
+top_k: 5  # Only used if penalty_type == "top_k_mass"
+apply_penalty_positions: "0:N-2"  # Positions to apply penalty (all except last)
+
+# Penalty type descriptions:
+# - non_max_sum: Sum of non-max probabilities (1 - max_prob)
+# - neg_entropy: Negative entropy to encourage sharp distributions
+# - neg_max_prob: Negative max probability (maximize confidence)
+# - top_k_mass: 1 - sum of top-k probabilities
+
+# ============================================================================
+# Optimization Settings
+# ============================================================================
+betas: [0.9, 0.95]  # AdamW beta parameters
+eps: 1.0e-08  # AdamW epsilon
+
+# ============================================================================
+# Logging and Checkpointing
+# ============================================================================
+use_wandb: true  # Enable Weights & Biases logging
+wandb_project: gpt2-entropy-regularization  # W&B project name
+wandb_entity: null  # W&B entity/team (set to your username or leave null)
+log_interval: 10  # Log metrics every N steps
+eval_interval: 500  # Evaluate on validation set every N steps
+save_interval: 1000  # Save checkpoint every N steps
+generate_interval: 500  # Generate text samples every N steps
+num_generate_samples: 3  # Number of samples to generate
+
+# ============================================================================
+# System Settings
+# ============================================================================
+device: cuda  # Device to use: "cuda", "mps", or "cpu" (auto-detected)
+seed: 42  # Random seed for reproducibility
+num_workers: 4  # Number of DataLoader workers (auto-adjusted for MPS)
+
+# ============================================================================
+# Output Settings
+# ============================================================================
+output_dir: ./outputs  # Directory for final outputs
+checkpoint_dir: ./checkpoints  # Directory for training checkpoints
