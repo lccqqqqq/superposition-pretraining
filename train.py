@@ -4,7 +4,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import LambdaLR
+import math
 from transformers import GPT2TokenizerFast
 import wandb
 from tqdm import tqdm
@@ -26,12 +27,44 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
+def get_lr_schedule_with_warmup(optimizer, warmup_steps, total_steps, min_lr_ratio=0.0):
+    """
+    Create learning rate scheduler with linear warmup and cosine decay.
+
+    This matches the schedule used in GPT-2 and many modern transformers:
+    1. Linear warmup: LR increases from 0 to max_lr over warmup_steps
+    2. Cosine decay: LR decreases from max_lr to min_lr following cosine curve
+
+    Args:
+        optimizer: PyTorch optimizer
+        warmup_steps: Number of steps for linear warmup
+        total_steps: Total number of training steps
+        min_lr_ratio: Minimum LR as ratio of max LR (default: 0.0)
+
+    Returns:
+        LambdaLR scheduler
+    """
+    def lr_lambda(current_step):
+        # Linear warmup
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+
+        # Cosine decay
+        progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
+
+        # Scale from min_lr_ratio to 1.0
+        return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_decay
+
+    return LambdaLR(optimizer, lr_lambda)
+
+
 def count_parameters(model):
     """Count trainable parameters."""
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def generate_samples(model, tokenizer, device, num_samples=3, max_length=100, temperature=1.0):
+def generate_samples(model, tokenizer, device, config):
     """Generate text samples from the model."""
     model.eval()
     samples = []
@@ -40,7 +73,7 @@ def generate_samples(model, tokenizer, device, num_samples=3, max_length=100, te
         "The quick brown fox",
         "Once upon a time",
         "In the beginning",
-    ][:num_samples]
+    ][:config.num_generate_samples]
 
     with torch.no_grad():
         for prompt in prompts:
@@ -50,10 +83,10 @@ def generate_samples(model, tokenizer, device, num_samples=3, max_length=100, te
             # Generate
             output = model.generate(
                 input_ids,
-                max_length=max_length,
-                temperature=temperature,
+                max_length=config.generate_max_length,
+                temperature=config.generate_temperature,
                 do_sample=True,
-                top_p=0.9,
+                top_p=config.generate_top_p,
                 pad_token_id=tokenizer.eos_token_id,
             )
 
@@ -120,6 +153,25 @@ def train(config: TrainingConfig):
             name=f"{config.dataset}_{config.penalty_type}_lambda{config.penalty_weight}",
         )
 
+        # Override config from W&B sweep if in sweep mode
+        # W&B sweep agent will set wandb.config with sweep parameters
+        if wandb.run.sweep_id is not None:
+            print("\nRunning in W&B sweep mode, applying sweep parameters...")
+            # Override parameters that are commonly swept
+            if hasattr(wandb.config, 'penalty_weight'):
+                config.penalty_weight = wandb.config.penalty_weight
+                print(f"  Sweep override: penalty_weight = {config.penalty_weight}")
+            if hasattr(wandb.config, 'penalty_type'):
+                config.penalty_type = wandb.config.penalty_type
+                print(f"  Sweep override: penalty_type = {config.penalty_type}")
+            if hasattr(wandb.config, 'learning_rate'):
+                config.learning_rate = wandb.config.learning_rate
+                print(f"  Sweep override: learning_rate = {config.learning_rate}")
+            if hasattr(wandb.config, 'batch_size'):
+                config.batch_size = wandb.config.batch_size
+                print(f"  Sweep override: batch_size = {config.batch_size}")
+            print()
+
     # Setup device
     device = torch.device(config.device)
     print(f"Using device: {device}")
@@ -131,14 +183,27 @@ def train(config: TrainingConfig):
 
     # Create model
     print("Creating model...")
-    model = create_gpt2_model(config.model_name, reinitialize=True)
+    model = create_gpt2_model(config.model_name, reinitialize=config.reinitialize_weights)
     model = model.to(device)
 
     # Log model info
     num_params = count_parameters(model)
     print(f"Number of trainable parameters: {num_params:,}")
+
+    # Log batch configuration
+    effective_batch_size = config.batch_size * config.gradient_accumulation_steps
+    print(f"\nBatch configuration:")
+    print(f"  Batch size per GPU: {config.batch_size}")
+    print(f"  Gradient accumulation steps: {config.gradient_accumulation_steps}")
+    print(f"  Effective batch size: {effective_batch_size}")
+
     if config.use_wandb:
-        wandb.config.update({"num_parameters": num_params})
+        wandb.config.update({
+            "num_parameters": num_params,
+            "actual_batch_size": config.batch_size,
+            "actual_gradient_accumulation_steps": config.gradient_accumulation_steps,
+            "actual_effective_batch_size": effective_batch_size,
+        })
 
     # Load data
     print("Loading data...")
@@ -149,6 +214,8 @@ def train(config: TrainingConfig):
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         device=config.device,
+        train_val_split=config.train_val_split,
+        openwebtext_val_samples=config.openwebtext_val_samples,
     )
 
     print(f"Train batches: {len(train_loader)}")
@@ -163,9 +230,21 @@ def train(config: TrainingConfig):
         weight_decay=config.weight_decay,
     )
 
-    # Setup scheduler
+    # Setup scheduler with linear warmup + cosine decay (matches GPT-2)
     total_steps = len(train_loader) * config.num_epochs // config.gradient_accumulation_steps
-    scheduler = CosineAnnealingLR(optimizer, T_max=total_steps)
+    scheduler = get_lr_schedule_with_warmup(
+        optimizer=optimizer,
+        warmup_steps=config.warmup_steps,
+        total_steps=total_steps,
+        min_lr_ratio=config.min_lr_ratio
+    )
+
+    print(f"\nLearning rate schedule:")
+    print(f"  Max learning rate: {config.learning_rate}")
+    print(f"  Warmup steps: {config.warmup_steps}")
+    print(f"  Total training steps: {total_steps}")
+    print(f"  Min LR (at end): {config.learning_rate * config.min_lr_ratio:.2e}")
+    print(f"  Schedule: Linear warmup + Cosine decay")
 
     # Training loop
     print("\nStarting training...")
@@ -275,8 +354,7 @@ def train(config: TrainingConfig):
                 if global_step % config.generate_interval == 0:
                     print("\nGenerating samples...")
                     samples = generate_samples(
-                        model, tokenizer, device,
-                        num_samples=config.num_generate_samples,
+                        model, tokenizer, device, config
                     )
 
                     for i, sample in enumerate(samples):
@@ -345,7 +423,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default=None,
-        choices=["tinyshakespeare", "openwebtext"],
+        choices=["tinyshakespeare", "openwebtext", "fineweb-edu"],
         help="Override dataset"
     )
     parser.add_argument(
@@ -359,6 +437,17 @@ if __name__ == "__main__":
         "--no_wandb",
         action="store_true",
         help="Disable Weights & Biases logging"
+    )
+    parser.add_argument(
+        "--auto_batch_size",
+        action="store_true",
+        help="Enable automatic batch size detection based on GPU memory"
+    )
+    parser.add_argument(
+        "--target_effective_batch_size",
+        type=int,
+        default=None,
+        help="Target effective batch size for auto batch size detection"
     )
 
     args = parser.parse_args()
@@ -387,6 +476,14 @@ if __name__ == "__main__":
     if args.no_wandb:
         config.use_wandb = False
         print("Override: W&B logging disabled")
+
+    if args.auto_batch_size:
+        config.auto_batch_size = True
+        print("Override: Auto batch size detection enabled")
+
+    if args.target_effective_batch_size is not None:
+        config.target_effective_batch_size = args.target_effective_batch_size
+        print(f"Override: target_effective_batch_size = {args.target_effective_batch_size}")
 
     # Re-run post-init to apply any auto-adjustments
     config.__post_init__()

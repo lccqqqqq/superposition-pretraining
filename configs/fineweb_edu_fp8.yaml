@@ -1,0 +1,110 @@
+# FineWeb-Edu Training with FP8 on H200
+#
+# This configuration trains GPT-2 on FineWeb-Edu (high-quality educational web content)
+# using FP8 precision for maximum throughput on H200 GPUs.
+#
+# FineWeb-Edu: 1.3T tokens of high-quality educational content (HuggingFace)
+# Expected speedup: ~2x faster than BF16 (~1.5 hours for full run)
+#
+# Requirements:
+#   - H100 or H200 GPU (Hopper architecture)
+#   - pip install accelerate>=0.25.0
+#   - pip install transformer-engine[pytorch]
+#
+# Usage:
+#   accelerate launch train_fp8.py --config configs/fineweb_edu_fp8.yaml
+
+# ============================================================================
+# Model Settings
+# ============================================================================
+model_name: gpt2
+reinitialize_weights: true
+
+# ============================================================================
+# Dataset Settings
+# ============================================================================
+dataset: fineweb-edu  # High-quality educational web content
+max_seq_length: 1024
+openwebtext_val_samples: 5000  # Also applies to fineweb-edu
+
+# ============================================================================
+# Training Hyperparameters
+# ============================================================================
+batch_size: 8  # Will be auto-adjusted
+gradient_accumulation_steps: 64  # Will be recalculated
+num_epochs: 2
+
+# Learning rate scaled for batch_size=512
+learning_rate: 0.0006  # 6e-4 consistent with the training configuration used by Kaparthy
+weight_decay: 0.1
+warmup_steps: 800
+max_grad_norm: 1.0
+min_lr_ratio: 0.1
+
+# ============================================================================
+# Adaptive Batch Size Settings
+# ============================================================================
+auto_batch_size: true
+target_effective_batch_size: 512
+max_batch_size: 128  # H200 can handle larger batches
+target_memory_utilization: 0.85  # Conservative for FP8
+
+# ============================================================================
+# FP8 Training Settings
+# ============================================================================
+use_fp8: true  # Enable FP8 training
+fp8_format: "hybrid"  # E4M3 for forward, E5M2 for backward (recommended)
+fp8_margin: 0  # No safety margin for maximum performance
+fp8_interval: 1  # Update scales every step (most accurate)
+fp8_amax_history_len: 1024  # Track max values over last 1024 steps
+fp8_amax_compute_algo: "max"  # Use max of history for scaling
+
+# For conservative/stable training, use:
+# fp8_margin: 1
+# fp8_interval: 10
+
+# ============================================================================
+# Sharpness Penalty Settings
+# ============================================================================
+penalty_type: non_max_sum
+penalty_weight: 0.0 # Default to clean run
+top_k: 5
+
+# ============================================================================
+# Optimization Settings
+# ============================================================================
+betas: [0.9, 0.95]
+eps: 1.0e-08
+
+# ============================================================================
+# Logging and Checkpointing
+# ============================================================================
+use_wandb: true
+wandb_project: gpt2-entropy-regularization
+wandb_entity: null
+
+log_interval: 50
+eval_interval: 500
+save_interval: 2000
+generate_interval: 500
+num_generate_samples: 3
+
+# ============================================================================
+# Text Generation Settings
+# ============================================================================
+generate_max_length: 100
+generate_temperature: 1.0
+generate_top_p: 0.9
+
+# ============================================================================
+# System Settings
+# ============================================================================
+device: cuda
+seed: 42
+num_workers: 30
+
+# ============================================================================
+# Output Settings
+# ============================================================================
+output_dir: ./outputs
+checkpoint_dir: ./checkpoints

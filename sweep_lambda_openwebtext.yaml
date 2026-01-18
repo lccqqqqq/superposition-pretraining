@@ -1,0 +1,75 @@
+# W&B Sweep Configuration for Lambda Grid Search on OpenWebText
+#
+# This sweep performs a grid search over different penalty_weight values
+# on the full OpenWebText dataset with adaptive batch sizing (effective batch = 512).
+#
+# Usage:
+#   1. Initialize sweep:    wandb sweep sweep_lambda_openwebtext.yaml
+#   2. Run agent:           wandb agent <sweep_id>
+#   3. Run on multiple GPUs: wandb agent <sweep_id> (on each machine)
+#
+# The sweep will run 5 experiments with penalty_weight values:
+#   [0.0, 0.005, 0.01, 0.02, 0.05]
+#
+# Note: Each run will take significantly longer than tinyshakespeare
+# (~10-20 hours per run depending on GPU)
+
+program: train.py
+method: grid
+
+metric:
+  name: val/ce_loss
+  goal: minimize
+
+parameters:
+  # Primary sweep parameter: penalty weight (lambda)
+  penalty_weight:
+    values: [0.0, 0.005, 0.01, 0.02, 0.05]
+
+  # Fixed training configuration for OpenWebText
+  dataset:
+    value: openwebtext
+
+  penalty_type:
+    value: non_max_sum
+
+  num_epochs:
+    value: 2  # 2 epochs sufficient for large dataset
+
+  # Learning rate scaled for batch_size=512
+  learning_rate:
+    value: 0.006  # Let's use 6e-4 for now
+
+  # Warmup steps for large batch training
+  warmup_steps:
+    value: 700
+
+  # Enable adaptive batch size detection
+  auto_batch_size:
+    value: true
+
+  target_effective_batch_size:
+    value: 512  # Standard for GPT-2 training
+
+  max_batch_size:
+    value: 128  # Allow larger per-GPU batches
+
+  target_memory_utilization:
+    value: 0.85
+
+  use_wandb:
+    value: true
+
+  # Validation set size
+  openwebtext_val_samples:
+    value: 5000
+
+# Alternative: Load from config file and override only sweep parameters
+# This is cleaner if you have a base config file
+# command:
+#   - ${env}
+#   - python
+#   - ${program}
+#   - "--config"
+#   - "configs/openwebtext_adaptive_batch.yaml"
+#   - ${args_no_hyphens}

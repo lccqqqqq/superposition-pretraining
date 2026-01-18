@@ -32,7 +32,7 @@ tokenizer.pad_token = tokenizer.eos_token
 
 # Create model
 print("Creating model...")
-model = create_gpt2_model(config.model_name, reinitialize=True)
+model = create_gpt2_model(config.model_name, reinitialize=config.reinitialize_weights)
 model = model.to(device)
 
 # Load data
@@ -44,6 +44,8 @@ train_loader, val_loader = get_dataloaders(
     batch_size=config.batch_size,
     num_workers=config.num_workers,
     device=config.device,
+    train_val_split=config.train_val_split,
+    openwebtext_val_samples=config.openwebtext_val_samples,
 )
 
 # Setup optimizer

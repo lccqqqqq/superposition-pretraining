@@ -5,12 +5,15 @@
 # Model Settings
 # ============================================================================
 model_name: gpt2  # HuggingFace model identifier (gpt2 = GPT2-small, 124M params)
+reinitialize_weights: true  # If false, load pretrained weights instead of random init
 
 # ============================================================================
 # Dataset Settings
 # ============================================================================
 dataset: tinyshakespeare  # Options: "tinyshakespeare" or "openwebtext"
 max_seq_length: 1024  # Maximum sequence length for training
+train_val_split: 0.9  # Train/validation split ratio (used for tinyshakespeare)
+openwebtext_val_samples: 1000  # Number of validation samples (used for openwebtext)
 
 # ============================================================================
 # Training Hyperparameters
@@ -22,6 +25,27 @@ learning_rate: 0.0006  # AdamW learning rate (6e-4)
 weight_decay: 0.1  # Weight decay for AdamW optimizer
 warmup_steps: 500  # Number of warmup steps for learning rate scheduler
 max_grad_norm: 1.0  # Maximum gradient norm for clipping
+min_lr_ratio: 0.1  # Minimum LR as ratio of max LR (LR decays to max_lr * 0.1)
+
+# ============================================================================
+# Adaptive Batch Size Settings
+# ============================================================================
+# Enable automatic batch size detection based on GPU memory
+# When enabled, automatically adjusts batch_size and gradient_accumulation_steps
+# to maximize GPU utilization while maintaining target effective batch size
+auto_batch_size: false  # Set to true to enable (opt-in feature)
+target_effective_batch_size: 32  # Desired effective batch size across all accumulation steps
+max_batch_size: 32  # Maximum batch_size per GPU (safety limit to prevent OOM)
+target_memory_utilization: 0.85  # Target GPU memory usage: 0.0 (0%) to 1.0 (100%)
+
+# How it works:
+# 1. Detects available GPU memory
+# 2. Estimates optimal batch_size that fits in memory
+# 3. Calculates gradient_accumulation_steps = target_effective_batch_size / batch_size
+# 4. Ensures actual effective batch size is close to target
+#
+# Example: If GPU memory allows batch_size=16 and target_effective_batch_size=32,
+#          then gradient_accumulation_steps=2 (effective batch = 16*2 = 32)
 
 # ============================================================================
 # Sharpness Penalty Settings
@@ -47,13 +71,20 @@ eps: 1.0e-08  # AdamW epsilon
 # Logging and Checkpointing
 # ============================================================================
 use_wandb: true  # Enable Weights & Biases logging
-wandb_project: gpt2-entropy-regularization  # W&B project name
+wandb_project: gpt2-entropy-regularization # W&B project name
 wandb_entity: null  # W&B entity/team (set to your username or leave null)
 log_interval: 10  # Log metrics every N steps
 eval_interval: 500  # Evaluate on validation set every N steps
 save_interval: 1000  # Save checkpoint every N steps
 generate_interval: 500  # Generate text samples every N steps
 num_generate_samples: 3  # Number of samples to generate
+
+# ============================================================================
+# Text Generation Settings
+# ============================================================================
+generate_max_length: 100  # Maximum length for generated text samples
+generate_temperature: 1.0  # Sampling temperature (higher = more random, lower = more deterministic)
+generate_top_p: 0.9  # Nucleus sampling: only sample from top tokens with cumulative prob >= p
 
 # ============================================================================
 # System Settings

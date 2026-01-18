@@ -1,0 +1,103 @@
+# OpenWebText Training Configuration with Adaptive Batch Sizing
+#
+# This configuration is optimized for training GPT-2 on the full OpenWebText dataset
+# with automatic batch size detection to utilize available GPU memory efficiently.
+#
+# Key features:
+# - Target effective batch size: 512 (standard for GPT-2 training)
+# - Adaptive batch sizing: automatically adjusts per-GPU batch size
+# - Learning rate scaled for larger batch size
+# - Training duration: 2 epochs (suitable for OpenWebText size)
+#
+# Usage:
+#   python train.py --config configs/openwebtext_adaptive_batch.yaml
+
+# ============================================================================
+# Model Settings
+# ============================================================================
+model_name: gpt2  # GPT2-small (124M params)
+reinitialize_weights: true  # Train from random initialization
+
+# ============================================================================
+# Dataset Settings
+# ============================================================================
+dataset: openwebtext  # Full OpenWebText dataset (~9B tokens)
+max_seq_length: 1024
+openwebtext_val_samples: 5000  # Larger validation set for better metrics
+
+# ============================================================================
+# Training Hyperparameters
+# ============================================================================
+# Note: batch_size and gradient_accumulation_steps will be auto-adjusted
+batch_size: 8  # Will be overridden by auto-detection
+gradient_accumulation_steps: 64  # Will be recalculated
+num_epochs: 2  # 2 epochs is sufficient for OpenWebText
+
+# Learning rate scaled for larger batch size
+# Original: 6e-4 for batch_size=32
+# New: 3e-3 for batch_size=512 (conservative sqrt scaling)
+learning_rate: 0.003  # 3e-3
+weight_decay: 0.1
+warmup_steps: 2000  # Longer warmup for large batch size
+max_grad_norm: 1.0
+min_lr_ratio: 0.1  # Decay to 10% of max LR
+
+# ============================================================================
+# Adaptive Batch Size Settings
+# ============================================================================
+auto_batch_size: true  # Enable automatic batch size detection
+target_effective_batch_size: 512  # Standard for GPT-2 training
+max_batch_size: 64  # Allow larger batches if GPU memory permits
+target_memory_utilization: 0.85  # Use 85% of GPU memory
+
+# Expected configurations:
+# - 24GB GPU (RTX 3090/4090): batch_size ~16-24, grad_accum ~21-32
+# - 40GB GPU (A100): batch_size ~32-48, grad_accum ~10-16
+# - 80GB GPU (A100 80GB): batch_size ~64, grad_accum ~8
+
+# ============================================================================
+# Sharpness Penalty Settings
+# ============================================================================
+penalty_type: non_max_sum
+penalty_weight: 0.01  # Can be swept with W&B
+top_k: 5
+
+# ============================================================================
+# Optimization Settings
+# ============================================================================
+betas: [0.9, 0.95]  # Standard AdamW betas for GPT-2
+eps: 1.0e-08
+
+# ============================================================================
+# Logging and Checkpointing
+# ============================================================================
+use_wandb: true
+wandb_project: gpt2-entropy-regularization
+wandb_entity: null  # Set to your W&B username
+
+# Intervals adjusted for large dataset (~880 steps/epoch with batch_size=512)
+log_interval: 50  # Log every 50 steps (~every 6% of epoch)
+eval_interval: 500  # Evaluate every 500 steps (~every 0.5 epochs)
+save_interval: 2000  # Save every 2000 steps (~every 2 epochs)
+generate_interval: 500  # Generate samples every 500 steps
+num_generate_samples: 3
+
+# ============================================================================
+# Text Generation Settings
+# ============================================================================
+generate_max_length: 100
+generate_temperature: 1.0
+generate_top_p: 0.9
+
+# ============================================================================
+# System Settings
+# ============================================================================
+device: cuda
+seed: 42
+num_workers: 4  # Use multiple workers for faster data loading
+
+# ============================================================================
+# Output Settings
+# ============================================================================
+output_dir: ./outputs
+checkpoint_dir: ./checkpoints

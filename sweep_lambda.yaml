@@ -1,0 +1,54 @@
+# W&B Sweep Configuration for Lambda (penalty_weight) Grid Search
+#
+# This sweep performs a grid search over different penalty_weight values
+# to find the optimal regularization strength for entropy-based sharpness penalties.
+#
+# Usage:
+#   1. Initialize sweep:    wandb sweep sweep_lambda.yaml
+#   2. Run agent:           wandb agent <sweep_id>
+#   3. Run on multiple GPUs: wandb agent <sweep_id> (on each machine)
+#
+# The sweep will run 5 experiments with penalty_weight values:
+#   [0.0, 0.005, 0.01, 0.02, 0.05]
+
+program: train.py
+method: grid
+
+metric:
+  name: val/ce_loss
+  goal: minimize
+
+parameters:
+  # Primary sweep parameter: penalty weight (lambda)
+  penalty_weight:
+    values: [0.0, 0.005, 0.01, 0.02, 0.05]
+
+  # Fixed training configuration
+  # Note: These can be overridden by modifying the base config file
+  dataset:
+    value: tinyshakespeare
+
+  penalty_type:
+    value: non_max_sum
+
+  num_epochs:
+    value: 10
+
+  use_wandb:
+    value: true
+
+  # Optional: Enable auto batch size detection for multi-GPU scenarios
+  # Uncomment these lines to enable adaptive batch sizing
+  # auto_batch_size:
+  #   value: true
+  # target_effective_batch_size:
+  #   value: 32
+
+# Note: To use a specific base configuration file, you can add:
+# command:
+#   - ${env}
+#   - python
+#   - ${program}
+#   - "--config"
+#   - "configs/baseline_no_penalty.yaml"
+#   - ${args_no_hyphens}

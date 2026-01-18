@@ -1,0 +1,50 @@
+# Test Configuration for Adaptive Batch Size Detection
+#
+# This configuration enables automatic batch size detection to test
+# the adaptive batch sizing feature.
+#
+# Usage:
+#   python train.py --config configs/test_auto_batch.yaml --no_wandb
+
+# Model and dataset (using tinyshakespeare for quick testing)
+model_name: gpt2
+reinitialize_weights: true
+dataset: tinyshakespeare
+max_seq_length: 1024
+
+# Training settings (will be adjusted by auto_batch_size)
+batch_size: 8  # This will be overridden by auto-detection
+gradient_accumulation_steps: 4  # This will be recalculated
+num_epochs: 1  # Just 1 epoch for testing
+learning_rate: 0.0006
+weight_decay: 0.1
+warmup_steps: 100
+max_grad_norm: 1.0
+
+# Enable adaptive batch size detection
+auto_batch_size: true
+target_effective_batch_size: 32
+max_batch_size: 64  # Allow up to 64 samples per batch
+target_memory_utilization: 0.85  # Use 85% of GPU memory
+
+# Penalty settings (baseline - no penalty for testing)
+penalty_type: non_max_sum
+penalty_weight: 0.0
+top_k: 5
+
+# Logging (reduced for testing)
+use_wandb: false  # Disable W&B for local testing
+log_interval: 5
+eval_interval: 50
+save_interval: 500
+generate_interval: 50
+num_generate_samples: 2
+
+# System settings
+device: cuda  # Will auto-detect
+seed: 42
+num_workers: 4
+
+# Output
+output_dir: ./outputs
+checkpoint_dir: ./checkpoints
